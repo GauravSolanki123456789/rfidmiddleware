@@ -1,0 +1,14 @@
+# Project Role
+You are an expert Full-Stack Architect and React Native Developer. We are building an enterprise RFID Middleware System for a jewelry client. 
+
+# Tech Stack
+- Backend: Node.js, Express, PostgreSQL, Prisma (ORM).
+- Frontend (Scanner App): React Native (Expo), TailwindCSS (Nativewind).
+
+# Core Directives (CRITICAL)
+1. DATA CONSISTENCY: You must maintain absolute consistency in variable names across the DB, API, and Frontend. 
+   - Always use `epc_tag_id` for the RFID string.
+   - Always use `sku_code`, `design_name`, `product_name`, and `current_location`.
+2. AUTONOMY: I will give you high-level business goals. You must design the database schema, write the API, and build the UI. Choose modern, clean UI layouts.
+3. ERROR HANDLING: Always implement robust try/catch blocks and user-facing error toasts in the UI.
+4. MOCK ERP: For now, simulate the "3rd-Party ERP" by creating a mock service in our backend that generates random jewelry inventory.

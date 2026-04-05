@@ -1,0 +1,64 @@
+// RFID jewelry middleware — single source of truth for DB models and enums.
+// Field names match Prisma client usage across the app (camelCase).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// Physical or logical place where inventory is stored (e.g. vault, showcase, floor).
+model Location {
+  id         String   @id @default(uuid()) @db.Uuid
+  name       String   @db.VarChar(128)
+  floorLabel String   @map("floor_label") @db.VarChar(32)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  products Product[]
+
+  @@unique([name, floorLabel])
+  @@index([floorLabel])
+  @@map("locations")
+}
+
+enum ProductItemType {
+  RING
+  NECKLACE
+  BANGLE
+
+  @@map("product_item_type")
+}
+
+enum ProductStatus {
+  IN_STOCK
+  SOLD
+  MISSING
+
+  @@map("product_status")
+}
+
+/// Jewelry SKU tracked by RFID EPC.
+model Product {
+  id               String          @id @default(uuid()) @db.Uuid
+  epcTagId         String          @unique @map("epc_tag_id") @db.VarChar(128)
+  skuCode          String          @unique @map("sku_code") @db.VarChar(64)
+  designName       String          @map("design_name") @db.VarChar(256)
+  itemType         ProductItemType @map("item_type")
+  grossWeightGrams Decimal         @map("gross_weight_grams") @db.Decimal(12, 4)
+  netWeightGrams   Decimal         @map("net_weight_grams") @db.Decimal(12, 4)
+  locationId       String          @map("location_id") @db.Uuid
+  status           ProductStatus
+  createdAt        DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  location Location @relation(fields: [locationId], references: [id], onDelete: Restrict)
+
+  @@index([locationId])
+  @@index([status])
+  @@index([itemType])
+  @@map("products")
+}
