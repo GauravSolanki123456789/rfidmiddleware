@@ -5,6 +5,7 @@ import type {
   AuditResultDto,
   InventorySummaryDto,
   ProductDto,
+  TransferResultDto,
 } from "../types/inventory";
 
 async function parseJson(res: Response): Promise<unknown> {
@@ -76,6 +77,24 @@ export async function postInventoryAudit(input: {
       body: JSON.stringify({
         locationId: input.locationId,
         scannedEpcs: input.scannedEpcs,
+      }),
+    },
+  );
+  return body.data;
+}
+
+/** Backend expects `epcTagIds` and `newLocationId` (see `transferBodySchema`). */
+export async function putInventoryTransfer(input: {
+  epcTagIds: string[];
+  newLocationId: string;
+}): Promise<TransferResultDto> {
+  const body = await requestJson<ApiSuccess<TransferResultDto>>(
+    "/inventory/transfer",
+    {
+      method: "PUT",
+      body: JSON.stringify({
+        epcTagIds: input.epcTagIds,
+        newLocationId: input.newLocationId,
       }),
     },
   );

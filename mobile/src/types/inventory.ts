@@ -38,6 +38,11 @@ export interface AuditResultDto {
   unknown_items: string[];
 }
 
+/** PUT /inventory/transfer — matches backend `transferBodySchema`. */
+export interface TransferResultDto {
+  updatedCount: number;
+}
+
 export interface ApiSuccess<T> {
   success: true;
   data: T;

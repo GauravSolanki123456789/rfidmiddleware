@@ -4,11 +4,13 @@ import { Platform, StyleSheet } from "react-native";
 import { DashboardScreen } from "../screens/DashboardScreen";
 import { LocateItemScreen } from "../screens/LocateItemScreen";
 import { StockAuditScreen } from "../screens/StockAuditScreen";
+import { TransferScreen } from "../screens/TransferScreen";
 import { theme } from "../theme/theme";
 
 export type RootTabParamList = {
   Dashboard: undefined;
   StockAudit: undefined;
+  Transfer: undefined;
   LocateItem: undefined;
 };
 
@@ -37,6 +39,7 @@ export function RootTabs() {
       screenOptions={{
         ...headerOptions,
         headerTitleAlign: "center",
+        tabBarShowLabel: true,
         tabBarActiveTintColor: theme.colors.tabActive,
         tabBarInactiveTintColor: theme.colors.tabInactive,
         tabBarStyle: {
@@ -47,8 +50,10 @@ export function RootTabs() {
           paddingTop: 8,
         },
         tabBarLabelStyle: {
-          fontSize: 13,
-          fontWeight: "700",
+          fontSize: 11,
+          fontWeight: "600",
+          letterSpacing: 0.2,
+          marginTop: 2,
         },
         tabBarHideOnKeyboard: true,
       }}
@@ -72,6 +77,17 @@ export function RootTabs() {
           tabBarLabel: "Audit",
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="scan" color={color} size={size + 2} />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="Transfer"
+        component={TransferScreen}
+        options={{
+          title: "Transfer",
+          tabBarLabel: "Transfer",
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="paper-plane" color={color} size={size + 2} />
           ),
         }}
       />

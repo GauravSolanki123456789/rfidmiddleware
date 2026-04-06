@@ -6,13 +6,15 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import { Picker } from "@react-native-picker/picker";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect, useIsFocused } from "@react-navigation/native";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { ProductListItem } from "../components/ProductListItem";
+import { useKeyboardWedgeScan } from "../hooks/useKeyboardWedgeScan";
 import { useInventoryStore } from "../store/useInventoryStore";
 import { theme } from "../theme/theme";
 import { uniqueLocationsFromProducts } from "../utils/locations";
@@ -28,12 +30,25 @@ export function StockAuditScreen() {
     clearAudit,
   } = useInventoryStore();
 
+  const isFocused = useIsFocused();
+
   const locations = useMemo(
     () => uniqueLocationsFromProducts(items),
     [items],
   );
 
   const [selectedLocationId, setSelectedLocationId] = useState<string>("");
+
+  const wedgeEnabled =
+    isFocused && !auditResult && !!selectedLocationId && locations.length > 0;
+
+  const {
+    inputRef,
+    count,
+    reset: resetWedge,
+    getScanned,
+    wedgeInputProps,
+  } = useKeyboardWedgeScan(wedgeEnabled);
 
   useFocusEffect(
     useCallback(() => {
@@ -47,9 +62,21 @@ export function StockAuditScreen() {
     setSelectedLocationId(locations[0].id);
   }, [locations, selectedLocationId]);
 
-  const onMockScan = () => {
+  useEffect(() => {
+    resetWedge();
+  }, [selectedLocationId, resetWedge]);
+
+  const onFinishScan = () => {
     if (!selectedLocationId) {
       Alert.alert("Location required", "Choose a store location first.");
+      return;
+    }
+    const scannedEpcs = getScanned();
+    if (scannedEpcs.length === 0) {
+      Alert.alert(
+        "No tags yet",
+        "Scan at least one EPC with the hardware trigger, then finish.",
+      );
       return;
     }
 
@@ -62,15 +89,24 @@ export function StockAuditScreen() {
       return;
     }
 
-    const take = Math.min(2, atLocation.length);
-    const real = atLocation.slice(0, take).map((p) => p.epcTagId);
-    const scannedEpcs = [...real, "DEADBEEF0000000000000001"];
-
     void runAudit({ locationId: selectedLocationId, scannedEpcs });
+  };
+
+  const onClearResults = () => {
+    clearAudit();
+    resetWedge();
   };
 
   return (
     <SafeAreaView style={styles.safe} edges={["bottom", "left", "right"]}>
+      <TextInput
+        ref={inputRef}
+        {...wedgeInputProps}
+        style={styles.wedgeInput}
+        accessibilityElementsHidden
+        importantForAccessibility="no"
+      />
+
       <ScrollView
         contentContainerStyle={styles.scroll}
         keyboardShouldPersistTaps="handled"
@@ -97,21 +133,34 @@ export function StockAuditScreen() {
           </Picker>
         </View>
 
-        <PrimaryButton
-          label="MOCK SCAN"
-          onPress={onMockScan}
-          loading={auditLoading}
-          disabled={!selectedLocationId || locations.length === 0}
-          variant="primary"
-          accessibilityHint="Runs a simulated RFID scan for this location"
-          icon={
-            <Ionicons
-              name="scan-outline"
-              size={24}
-              color={theme.colors.onPrimary}
+        {!auditResult ? (
+          <View style={styles.scanPanel}>
+            <View style={styles.counterCard} accessibilityRole="summary">
+              <Text style={styles.counterLabel}>Tags scanned</Text>
+              <Text style={styles.counterValue}>{count}</Text>
+              <Text style={styles.counterHint}>
+                Pull the RFID trigger — each tag ends with Enter. This field
+                stays focused for the gun.
+              </Text>
+            </View>
+
+            <PrimaryButton
+              label="Finish scan & view report"
+              onPress={onFinishScan}
+              loading={auditLoading}
+              disabled={!selectedLocationId || locations.length === 0}
+              variant="primary"
+              accessibilityHint="Runs stock audit with scanned EPCs"
+              icon={
+                <Ionicons
+                  name="checkmark-done"
+                  size={24}
+                  color={theme.colors.onPrimary}
+                />
+              }
             />
-          }
-        />
+          </View>
+        ) : null}
 
         {auditError ? (
           <View style={styles.banner} accessibilityRole="alert">
@@ -126,7 +175,7 @@ export function StockAuditScreen() {
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Clear results"
-                onPress={clearAudit}
+                onPress={onClearResults}
                 style={({ pressed }) => [
                   styles.clearBtn,
                   pressed && { opacity: 0.88 },
@@ -166,18 +215,7 @@ export function StockAuditScreen() {
               ))
             )}
           </View>
-        ) : (
-          <View style={styles.placeholder}>
-            <Ionicons
-              name="scan-circle-outline"
-              size={48}
-              color={theme.colors.textMuted}
-            />
-            <Text style={styles.placeholderText}>
-              Choose a location, then tap scan.
-            </Text>
-          </View>
-        )}
+        ) : null}
       </ScrollView>
     </SafeAreaView>
   );
@@ -185,6 +223,14 @@ export function StockAuditScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: theme.colors.bg },
+  wedgeInput: {
+    position: "absolute",
+    width: 1,
+    height: 1,
+    opacity: 0,
+    overflow: "hidden",
+    zIndex: -1,
+  },
   scroll: {
     padding: theme.space.lg,
     paddingBottom: theme.space.xxl,
@@ -210,6 +256,40 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     minHeight: theme.touchMin,
     fontSize: theme.type.body,
+  },
+  scanPanel: { gap: theme.space.lg },
+  counterCard: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    paddingVertical: theme.space.xl,
+    paddingHorizontal: theme.space.lg,
+    alignItems: "center",
+    ...theme.shadow.card,
+  },
+  counterLabel: {
+    color: theme.colors.textMuted,
+    fontSize: theme.type.label,
+    fontWeight: "800",
+    letterSpacing: 1,
+    textTransform: "uppercase",
+  },
+  counterValue: {
+    marginTop: theme.space.sm,
+    fontSize: 56,
+    fontWeight: "900",
+    color: theme.colors.primary,
+    letterSpacing: -1,
+  },
+  counterHint: {
+    marginTop: theme.space.md,
+    textAlign: "center",
+    color: theme.colors.textMuted,
+    fontSize: theme.type.body,
+    lineHeight: 24,
+    fontWeight: "600",
+    maxWidth: 320,
   },
   banner: {
     backgroundColor: theme.colors.dangerBg,
@@ -286,19 +366,5 @@ const styles = StyleSheet.create({
     color: theme.colors.warning,
     fontSize: theme.type.bodyLarge,
     fontWeight: "800",
-  },
-  placeholder: {
-    alignItems: "center",
-    paddingVertical: theme.space.xl,
-    paddingHorizontal: theme.space.md,
-    gap: theme.space.md,
-  },
-  placeholderText: {
-    textAlign: "center",
-    color: theme.colors.textMuted,
-    fontSize: theme.type.body,
-    lineHeight: 26,
-    fontWeight: "600",
-    maxWidth: 320,
   },
 });
