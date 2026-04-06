@@ -5,6 +5,8 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { RootTabs } from "./src/navigation/RootTabs";
 import { theme } from "./src/theme/theme";
 
+const rootStyle = { flex: 1, backgroundColor: theme.colors.bg };
+
 const navTheme = {
   ...DefaultTheme,
   colors: {
@@ -20,7 +22,7 @@ const navTheme = {
 
 export default function App() {
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
+    <GestureHandlerRootView style={rootStyle}>
       <SafeAreaProvider>
         <NavigationContainer theme={navTheme}>
           <StatusBar style="dark" />

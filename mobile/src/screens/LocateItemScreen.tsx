@@ -9,12 +9,15 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
+import { LARGE_LIST_PROPS } from "../constants/listPerformance";
+import { ErrorBanner } from "../components/ErrorBanner";
 import { useInventoryStore } from "../store/useInventoryStore";
 import type { ProductDto } from "../types/inventory";
 import { theme } from "../theme/theme";
+import { formatProductStatus } from "../utils/formatProductStatus";
 
 export function LocateItemScreen() {
-  const { items, loadDashboard } = useInventoryStore();
+  const { items, loadDashboard, error } = useInventoryStore();
   const [query, setQuery] = useState("");
 
   useFocusEffect(
@@ -33,8 +36,31 @@ export function LocateItemScreen() {
     );
   }, [items, query]);
 
+  const listHeader = useMemo(() => {
+    const q = query.trim();
+    if (!q) return null;
+    return (
+      <View style={styles.resultBar}>
+        <Text style={styles.resultBarText} accessibilityLiveRegion="polite">
+          {results.length === 0
+            ? "No matches"
+            : `${results.length} ${results.length === 1 ? "item" : "items"}`}
+        </Text>
+      </View>
+    );
+  }, [query, results.length]);
+
   return (
     <SafeAreaView style={styles.safe} edges={["bottom", "left", "right"]}>
+      {error ? (
+        <View style={styles.syncBanner}>
+          <ErrorBanner
+            title="Could not sync catalog"
+            message={error}
+            onRetry={() => void loadDashboard()}
+          />
+        </View>
+      ) : null}
       <View style={styles.searchRow}>
         <Ionicons
           name="search"
@@ -61,6 +87,8 @@ export function LocateItemScreen() {
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
         keyboardShouldPersistTaps="handled"
+        ListHeaderComponent={listHeader}
+        {...LARGE_LIST_PROPS}
         ListEmptyComponent={
           <View style={styles.empty}>
             <Ionicons
@@ -89,22 +117,15 @@ export function LocateItemScreen() {
 function LocateCard({ product }: { product: ProductDto }) {
   return (
     <View style={styles.card}>
-      <Text style={styles.cardTitle} numberOfLines={3}>
+      <Text style={styles.cardTitle} numberOfLines={2}>
         {product.designName}
       </Text>
       <Text style={styles.cardSku}>SKU · {product.skuCode}</Text>
-      <View style={styles.row}>
-        <View style={styles.pill}>
-          <Text style={styles.pillLabel}>Location</Text>
-          <Text style={styles.pillValue}>{product.location.name}</Text>
-        </View>
-        <View style={styles.pill}>
-          <Text style={styles.pillLabel}>Floor</Text>
-          <Text style={styles.pillValue}>{product.location.floorLabel}</Text>
-        </View>
-      </View>
-      <Text style={styles.meta}>
-        EPC {product.epcTagId} · {product.status}
+      <Text style={styles.locLine} numberOfLines={1}>
+        {product.location.name} · {product.location.floorLabel}
+      </Text>
+      <Text style={styles.meta} numberOfLines={1}>
+        EPC {product.epcTagId} · {formatProductStatus(product.status)}
       </Text>
     </View>
   );
@@ -112,6 +133,11 @@ function LocateCard({ product }: { product: ProductDto }) {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: theme.colors.bg },
+  syncBanner: {
+    paddingHorizontal: theme.space.lg,
+    paddingTop: theme.space.sm,
+    paddingBottom: theme.space.xs,
+  },
   searchRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -139,55 +165,49 @@ const styles = StyleSheet.create({
     paddingBottom: theme.space.xxl,
     flexGrow: 1,
   },
+  resultBar: {
+    paddingBottom: theme.space.sm,
+    marginBottom: theme.space.xs,
+  },
+  resultBarText: {
+    color: theme.colors.textSecondary,
+    fontSize: theme.type.label,
+    fontWeight: "800",
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+  },
   card: {
     backgroundColor: theme.colors.surface,
-    borderRadius: theme.radius.lg,
+    borderRadius: theme.radius.md,
     borderWidth: 1,
     borderColor: theme.colors.border,
-    padding: theme.space.lg,
-    marginBottom: theme.space.md,
+    paddingVertical: theme.space.md,
+    paddingHorizontal: theme.space.lg,
+    marginBottom: theme.space.sm,
     ...theme.shadow.card,
   },
   cardTitle: {
     color: theme.colors.text,
-    fontSize: theme.type.section,
+    fontSize: theme.type.bodyLarge,
     fontWeight: "900",
     marginBottom: theme.space.xs,
-    lineHeight: 28,
+    lineHeight: 24,
   },
   cardSku: {
     color: theme.colors.textSecondary,
     fontSize: theme.type.label,
     fontWeight: "700",
-    marginBottom: theme.space.md,
+    marginBottom: theme.space.sm,
   },
-  row: { flexDirection: "row", gap: theme.space.sm, flexWrap: "wrap" },
-  pill: {
-    flexGrow: 1,
-    minWidth: "45%",
-    backgroundColor: theme.colors.surfaceMuted,
-    borderRadius: theme.radius.md,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    padding: theme.space.md,
-  },
-  pillLabel: {
-    color: theme.colors.textMuted,
-    fontSize: theme.type.caption,
-    fontWeight: "800",
-    letterSpacing: 0.6,
-    textTransform: "uppercase",
+  locLine: {
+    color: theme.colors.text,
+    fontSize: theme.type.body,
+    fontWeight: "700",
     marginBottom: theme.space.xs,
   },
-  pillValue: {
-    color: theme.colors.text,
-    fontSize: theme.type.bodyLarge,
-    fontWeight: "900",
-  },
   meta: {
-    marginTop: theme.space.md,
     color: theme.colors.textMuted,
-    fontSize: theme.type.label,
+    fontSize: theme.type.caption,
     fontWeight: "600",
   },
   empty: {

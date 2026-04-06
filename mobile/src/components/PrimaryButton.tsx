@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import {
   ActivityIndicator,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -43,12 +44,25 @@ export function PrimaryButton({
   const textColor =
     isPrimary || isDanger ? theme.colors.onPrimary : theme.colors.text;
 
+  const isDisabled = !!(disabled || loading);
+
+  const androidRipple =
+    Platform.OS === "android"
+      ? variant === "outline"
+        ? { color: "rgba(37, 99, 235, 0.18)", foreground: true }
+        : isDanger
+          ? { color: "rgba(255, 255, 255, 0.22)", foreground: true }
+          : { color: "rgba(255, 255, 255, 0.28)", foreground: true }
+      : undefined;
+
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityHint={accessibilityHint}
+      accessibilityState={{ disabled: isDisabled }}
       disabled={disabled || loading}
+      android_ripple={androidRipple}
       onPress={onPress}
       style={({ pressed }) => [
         styles.base,

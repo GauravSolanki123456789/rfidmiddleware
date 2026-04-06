@@ -31,7 +31,8 @@ interface InventoryState {
 export const useInventoryStore = create<InventoryState>((set) => ({
   items: [],
   summary: null,
-  loading: false,
+  /** True until the first dashboard load finishes (avoids empty metric flash). */
+  loading: true,
   error: null,
   lastFetchedAt: null,
 

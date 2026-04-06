@@ -9,11 +9,14 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
+import { ErrorBanner } from "../components/ErrorBanner";
 import { useInventoryStore } from "../store/useInventoryStore";
 import { theme } from "../theme/theme";
+import { formatShortDateTime } from "../utils/formatTime";
 
 export function DashboardScreen() {
-  const { summary, loading, error, loadDashboard } = useInventoryStore();
+  const { summary, loading, error, lastFetchedAt, loadDashboard } =
+    useInventoryStore();
   const [refreshing, setRefreshing] = useState(false);
 
   useFocusEffect(
@@ -31,6 +34,10 @@ export function DashboardScreen() {
     }
   }, [loadDashboard]);
 
+  const onRetry = useCallback(() => {
+    void loadDashboard();
+  }, [loadDashboard]);
+
   return (
     <SafeAreaView style={styles.safe} edges={["bottom", "left", "right"]}>
       <ScrollView
@@ -45,9 +52,17 @@ export function DashboardScreen() {
         }
       >
         {error ? (
-          <View style={styles.banner} accessibilityRole="alert">
-            <Text style={styles.bannerText}>{error}</Text>
-          </View>
+          <ErrorBanner
+            title="Could not load inventory"
+            message={error}
+            onRetry={onRetry}
+          />
+        ) : null}
+
+        {lastFetchedAt && summary ? (
+          <Text style={styles.updated} accessibilityLiveRegion="polite">
+            Last updated {formatShortDateTime(lastFetchedAt)}
+          </Text>
         ) : null}
 
         {loading && !summary ? (
@@ -55,7 +70,7 @@ export function DashboardScreen() {
             <ActivityIndicator size="large" color={theme.colors.primary} />
             <Text style={styles.loadingLabel}>Loading summary…</Text>
           </View>
-        ) : (
+        ) : error && !summary ? null : (
           <View style={styles.metrics}>
             <MetricCard
               label="Total items"
@@ -83,6 +98,12 @@ export function DashboardScreen() {
             />
           </View>
         )}
+
+        {error && !loading && summary ? (
+          <Text style={styles.staleHint}>
+            Showing cached figures. Pull to refresh or tap Retry above.
+          </Text>
+        ) : null}
       </ScrollView>
     </SafeAreaView>
   );
@@ -100,7 +121,11 @@ function MetricCard({
   subtitle: string;
 }) {
   return (
-    <View style={styles.metricCard} accessibilityRole="summary">
+    <View
+      style={styles.metricCard}
+      accessibilityRole="summary"
+      accessibilityLabel={`${label}, ${value === "—" ? "unknown" : value}, ${subtitle}`}
+    >
       <View style={[styles.metricAccent, { backgroundColor: accent }]} />
       <View style={styles.metricBody}>
         <Text style={styles.metricLabel}>{label}</Text>
@@ -117,6 +142,22 @@ const styles = StyleSheet.create({
     padding: theme.space.lg,
     paddingBottom: theme.space.xxl,
     flexGrow: 1,
+    gap: theme.space.md,
+  },
+  updated: {
+    alignSelf: "center",
+    color: theme.colors.textMuted,
+    fontSize: theme.type.caption,
+    fontWeight: "600",
+  },
+  staleHint: {
+    textAlign: "center",
+    color: theme.colors.textMuted,
+    fontSize: theme.type.caption,
+    fontWeight: "600",
+    lineHeight: 20,
+    marginTop: theme.space.xs,
+    paddingHorizontal: theme.space.md,
   },
   loadingBlock: {
     paddingVertical: theme.space.xxl,
@@ -127,20 +168,6 @@ const styles = StyleSheet.create({
     color: theme.colors.textMuted,
     fontSize: theme.type.body,
     fontWeight: "600",
-  },
-  banner: {
-    backgroundColor: theme.colors.dangerBg,
-    borderColor: theme.colors.dangerBorder,
-    borderWidth: 1,
-    padding: theme.space.md,
-    borderRadius: theme.radius.md,
-    marginBottom: theme.space.md,
-  },
-  bannerText: {
-    color: theme.colors.danger,
-    fontSize: theme.type.body,
-    fontWeight: "600",
-    lineHeight: 26,
   },
   metrics: { gap: theme.space.md },
   metricCard: {

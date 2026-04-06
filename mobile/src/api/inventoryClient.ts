@@ -33,16 +33,31 @@ function getErrorMessage(json: unknown, fallback: string): string {
   return fallback;
 }
 
+function networkFailureMessage(err: unknown): string {
+  if (err instanceof TypeError) {
+    return "Network error — check that the API server is running and EXPO_PUBLIC_API_BASE_URL is correct.";
+  }
+  if (err instanceof Error && err.message.includes("Network request failed")) {
+    return "Network request failed. Verify Wi‑Fi and server address.";
+  }
+  return "Network error — could not reach the server.";
+}
+
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   const url = `${getApiBaseUrl()}${path}`;
-  const res = await fetch(url, {
-    ...init,
-    headers: {
-      Accept: "application/json",
-      "Content-Type": "application/json",
-      ...(init?.headers ?? {}),
-    },
-  });
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      ...init,
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        ...(init?.headers ?? {}),
+      },
+    });
+  } catch (err) {
+    throw new Error(networkFailureMessage(err));
+  }
   const json = await parseJson(res);
   if (!res.ok) {
     throw new Error(

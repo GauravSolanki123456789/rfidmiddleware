@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Alert,
+  FlatList,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -12,17 +13,22 @@ import {
 import { Picker } from "@react-native-picker/picker";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect, useIsFocused } from "@react-navigation/native";
+import { LARGE_LIST_PROPS } from "../constants/listPerformance";
+import { ErrorBanner } from "../components/ErrorBanner";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { ProductListItem } from "../components/ProductListItem";
 import { useKeyboardWedgeScan } from "../hooks/useKeyboardWedgeScan";
 import { useInventoryStore } from "../store/useInventoryStore";
 import { theme } from "../theme/theme";
+import type { AuditListRow } from "../utils/reportFlatListRows";
+import { auditResultToFlatListRows } from "../utils/reportFlatListRows";
 import { uniqueLocationsFromProducts } from "../utils/locations";
 
 export function StockAuditScreen() {
   const {
     items,
     loadDashboard,
+    error: catalogError,
     runAudit,
     auditLoading,
     auditError,
@@ -49,6 +55,11 @@ export function StockAuditScreen() {
     getScanned,
     wedgeInputProps,
   } = useKeyboardWedgeScan(wedgeEnabled);
+
+  const auditRows = useMemo(
+    () => (auditResult ? auditResultToFlatListRows(auditResult) : []),
+    [auditResult],
+  );
 
   useFocusEffect(
     useCallback(() => {
@@ -92,10 +103,63 @@ export function StockAuditScreen() {
     void runAudit({ locationId: selectedLocationId, scannedEpcs });
   };
 
-  const onClearResults = () => {
+  const onClearResults = useCallback(() => {
     clearAudit();
     resetWedge();
-  };
+  }, [clearAudit, resetWedge]);
+
+  const renderAuditRow = useCallback(({ item }: { item: AuditListRow }) => {
+    switch (item.kind) {
+      case "header":
+        return (
+          <Text style={[styles.sectionTitle, styles.sectionTitleInList]}>
+            {item.title}
+          </Text>
+        );
+      case "empty":
+        return <Text style={styles.empty}>{item.label}</Text>;
+      case "product":
+        return (
+          <ProductListItem product={item.product} tone={item.tone} />
+        );
+      case "epc":
+        return (
+          <View style={styles.unknownRow}>
+            <Text style={styles.unknownEpc}>{item.epc}</Text>
+          </View>
+        );
+      default:
+        return null;
+    }
+  }, []);
+
+  const listHeader = useMemo(
+    () => (
+      <>
+        {auditError ? (
+          <View style={styles.auditErrorWrap}>
+            <ErrorBanner title="Audit could not complete" message={auditError} />
+          </View>
+        ) : null}
+        <View style={styles.resultsHeader}>
+          <Text style={styles.resultsTitle}>Scan results</Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Clear results"
+            onPress={onClearResults}
+            style={({ pressed }) => [
+              styles.clearBtn,
+              pressed && { opacity: 0.88 },
+            ]}
+            hitSlop={12}
+          >
+            <Text style={styles.clearText}>Clear</Text>
+          </Pressable>
+        </View>
+      </>
+    ),
+    [auditError, onClearResults],
+  );
 
   return (
     <SafeAreaView style={styles.safe} edges={["bottom", "left", "right"]}>
@@ -107,10 +171,17 @@ export function StockAuditScreen() {
         importantForAccessibility="no"
       />
 
-      <ScrollView
-        contentContainerStyle={styles.scroll}
-        keyboardShouldPersistTaps="handled"
-      >
+      {catalogError ? (
+        <View style={styles.syncBanner}>
+          <ErrorBanner
+            title="Could not sync catalog"
+            message={catalogError}
+            onRetry={() => void loadDashboard()}
+          />
+        </View>
+      ) : null}
+
+      <View style={styles.locationBlock}>
         <Text style={styles.fieldLabel}>Location</Text>
         <View style={styles.pickerWrap} accessibilityLabel="Store location">
           <Picker
@@ -132,8 +203,14 @@ export function StockAuditScreen() {
             ))}
           </Picker>
         </View>
+      </View>
 
-        {!auditResult ? (
+      {!auditResult ? (
+        <ScrollView
+          style={styles.flex}
+          contentContainerStyle={styles.scroll}
+          keyboardShouldPersistTaps="handled"
+        >
           <View style={styles.scanPanel}>
             <View style={styles.counterCard} accessibilityRole="summary">
               <Text style={styles.counterLabel}>Tags scanned</Text>
@@ -160,68 +237,25 @@ export function StockAuditScreen() {
               }
             />
           </View>
-        ) : null}
-
-        {auditError ? (
-          <View style={styles.banner} accessibilityRole="alert">
-            <Text style={styles.bannerText}>{auditError}</Text>
-          </View>
-        ) : null}
-
-        {auditResult ? (
-          <View style={styles.results}>
-            <View style={styles.resultsHeader}>
-              <Text style={styles.resultsTitle}>Scan results</Text>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Clear results"
-                onPress={onClearResults}
-                style={({ pressed }) => [
-                  styles.clearBtn,
-                  pressed && { opacity: 0.88 },
-                ]}
-                hitSlop={12}
-              >
-                <Text style={styles.clearText}>Clear</Text>
-              </Pressable>
-            </View>
-
-            <Text style={styles.sectionTitle}>Found</Text>
-            {auditResult.found_items.length === 0 ? (
-              <Text style={styles.empty}>None</Text>
-            ) : (
-              auditResult.found_items.map((p) => (
-                <ProductListItem key={p.id} product={p} tone="success" />
-              ))
-            )}
-
-            <Text style={styles.sectionTitle}>Missing</Text>
-            {auditResult.missing_items.length === 0 ? (
-              <Text style={styles.empty}>None</Text>
-            ) : (
-              auditResult.missing_items.map((p) => (
-                <ProductListItem key={p.id} product={p} tone="danger" />
-              ))
-            )}
-
-            <Text style={styles.sectionTitle}>Unknown tags</Text>
-            {auditResult.unknown_items.length === 0 ? (
-              <Text style={styles.empty}>None</Text>
-            ) : (
-              auditResult.unknown_items.map((epc) => (
-                <View key={epc} style={styles.unknownRow}>
-                  <Text style={styles.unknownEpc}>{epc}</Text>
-                </View>
-              ))
-            )}
-          </View>
-        ) : null}
-      </ScrollView>
+        </ScrollView>
+      ) : (
+        <FlatList
+          style={styles.flex}
+          data={auditRows}
+          keyExtractor={(item) => item.key}
+          renderItem={renderAuditRow}
+          ListHeaderComponent={listHeader}
+          contentContainerStyle={styles.flatListContent}
+          keyboardShouldPersistTaps="handled"
+          {...LARGE_LIST_PROPS}
+        />
+      )}
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  flex: { flex: 1 },
   safe: { flex: 1, backgroundColor: theme.colors.bg },
   wedgeInput: {
     position: "absolute",
@@ -231,10 +265,25 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     zIndex: -1,
   },
+  syncBanner: {
+    paddingHorizontal: theme.space.lg,
+    paddingTop: theme.space.sm,
+    paddingBottom: theme.space.xs,
+  },
+  locationBlock: {
+    paddingHorizontal: theme.space.lg,
+    paddingTop: theme.space.md,
+    paddingBottom: theme.space.sm,
+  },
   scroll: {
-    padding: theme.space.lg,
+    paddingHorizontal: theme.space.lg,
     paddingBottom: theme.space.xxl,
     gap: theme.space.md,
+  },
+  flatListContent: {
+    paddingHorizontal: theme.space.lg,
+    paddingBottom: theme.space.xxl,
+    gap: theme.space.sm,
   },
   fieldLabel: {
     color: theme.colors.textSecondary,
@@ -291,31 +340,17 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     maxWidth: 320,
   },
-  banner: {
-    backgroundColor: theme.colors.dangerBg,
-    borderColor: theme.colors.dangerBorder,
-    borderWidth: 1,
-    padding: theme.space.md,
-    borderRadius: theme.radius.md,
-  },
-  bannerText: {
-    color: theme.colors.danger,
-    fontSize: theme.type.body,
-    fontWeight: "600",
-    lineHeight: 26,
-  },
-  results: {
-    marginTop: theme.space.sm,
-    paddingTop: theme.space.md,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: theme.colors.border,
-    gap: theme.space.sm,
+  auditErrorWrap: {
+    marginBottom: theme.space.md,
   },
   resultsHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     marginBottom: theme.space.sm,
+    paddingTop: theme.space.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: theme.colors.border,
   },
   clearBtn: {
     minHeight: 48,
@@ -347,6 +382,9 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     letterSpacing: 0.6,
     textTransform: "uppercase",
+  },
+  sectionTitleInList: {
+    marginTop: theme.space.lg,
   },
   empty: {
     color: theme.colors.textMuted,

@@ -1,6 +1,7 @@
 import { StyleSheet, Text, View } from "react-native";
 import type { ProductDto } from "../types/inventory";
 import { theme } from "../theme/theme";
+import { formatProductStatus } from "../utils/formatProductStatus";
 
 type Props = {
   product: ProductDto;
@@ -35,12 +36,15 @@ export function ProductListItem({ product, tone }: Props) {
       <Text style={styles.title} numberOfLines={2}>
         {product.designName}
       </Text>
-      <Text style={styles.meta}>SKU: {product.skuCode}</Text>
-      <Text style={styles.meta}>EPC: {product.epcTagId}</Text>
-      <Text style={styles.meta}>
-        {product.location.name} · Floor {product.location.floorLabel}
+      <Text style={styles.lineDense} numberOfLines={1}>
+        SKU {product.skuCode} · {formatProductStatus(product.status)}
       </Text>
-      <Text style={styles.meta}>Status: {product.status}</Text>
+      <Text style={styles.epc} numberOfLines={1}>
+        {product.epcTagId}
+      </Text>
+      <Text style={styles.loc} numberOfLines={1}>
+        {product.location.name} · {product.location.floorLabel}
+      </Text>
     </View>
   );
 }
@@ -51,7 +55,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: theme.colors.border,
     borderLeftWidth: 5,
-    padding: theme.space.md,
+    paddingVertical: theme.space.sm,
+    paddingHorizontal: theme.space.md,
     marginBottom: theme.space.sm,
     ...theme.shadow.card,
   },
@@ -60,11 +65,24 @@ const styles = StyleSheet.create({
     fontSize: theme.type.bodyLarge,
     fontWeight: "800",
     marginBottom: theme.space.xs,
+    lineHeight: 24,
   },
-  meta: {
+  lineDense: {
     color: theme.colors.textSecondary,
     fontSize: theme.type.label,
-    marginTop: 4,
+    fontWeight: "700",
     lineHeight: 22,
+  },
+  epc: {
+    color: theme.colors.textMuted,
+    fontSize: theme.type.caption,
+    fontWeight: "600",
+    marginTop: 4,
+  },
+  loc: {
+    color: theme.colors.textSecondary,
+    fontSize: theme.type.caption,
+    fontWeight: "600",
+    marginTop: 2,
   },
 });
