@@ -1,24 +1,47 @@
 import type { ProductDto } from "../types/inventory";
+import {
+  displayBin,
+  displayItemName,
+  displaySku,
+  displayStyleCode,
+} from "./productDisplay";
 
 /**
- * Client-side filter aligned with GET /inventory/master-list semantics:
- * source location + optional design contains + optional SKU equals (case-insensitive).
+ * Client-side filter aligned with GET /inventory/master-list:
+ * source bin + optional item name contains + optional style code contains + optional SKU equals (case-insensitive).
  */
 export function filterExpectedTransferItems(
   items: ProductDto[],
-  sourceLocationId: string,
-  designNameTrim: string | undefined,
-  skuCodeTrim: string | undefined,
+  sourceBinLocation: string,
+  opts: {
+    itemNameTrim?: string;
+    styleCodeTrim?: string;
+    skuTrim?: string;
+  },
 ): ProductDto[] {
+  const { itemNameTrim, styleCodeTrim, skuTrim } = opts;
   return items.filter((p) => {
-    if (p.locationId !== sourceLocationId) return false;
-    if (designNameTrim) {
-      if (!p.designName.toLowerCase().includes(designNameTrim.toLowerCase())) {
+    if (displayBin(p) !== sourceBinLocation) return false;
+    if (itemNameTrim) {
+      if (
+        !displayItemName(p)
+          .toLowerCase()
+          .includes(itemNameTrim.toLowerCase())
+      ) {
         return false;
       }
     }
-    if (skuCodeTrim) {
-      if (p.skuCode.toLowerCase() !== skuCodeTrim.toLowerCase()) {
+    if (styleCodeTrim) {
+      if (
+        !displayStyleCode(p)
+          .toLowerCase()
+          .includes(styleCodeTrim.toLowerCase())
+      ) {
+        return false;
+      }
+    }
+    if (skuTrim) {
+      if (displaySku(p).toLowerCase() !== skuTrim.toLowerCase()) {
         return false;
       }
     }
@@ -30,91 +53,57 @@ export interface TransferScanReport {
   ready: ProductDto[];
   missing: ProductDto[];
   invalidTags: {
-    epc: string;
+    barcode: string;
     knownProduct: ProductDto | null;
     reason: string;
   }[];
 }
 
 export function buildTransferScanReport(
-  sourceLocationId: string,
+  sourceBinLocation: string,
   expectedProducts: ProductDto[],
-  scannedEpcs: string[],
+  scannedBarcodes: string[],
   masterItems: ProductDto[],
 ): TransferScanReport {
-  const expectedEpcSet = new Set(expectedProducts.map((p) => p.epcTagId));
+  const expectedBarcodeSet = new Set(
+    expectedProducts.map((p) => p.barcode),
+  );
   const scannedUnique = [
     ...new Set(
-      scannedEpcs.map((s) => s.trim()).filter((s) => s.length > 0),
+      scannedBarcodes.map((s) => s.trim()).filter((s) => /^\d{8}$/.test(s)),
     ),
   ];
 
   const ready: ProductDto[] = [];
   const seenReady = new Set<string>();
-  for (const epc of scannedUnique) {
-    if (!expectedEpcSet.has(epc)) continue;
-    const p = expectedProducts.find((x) => x.epcTagId === epc);
-    if (p && !seenReady.has(epc)) {
-      seenReady.add(epc);
+  for (const barcode of scannedUnique) {
+    if (!expectedBarcodeSet.has(barcode)) continue;
+    const p = expectedProducts.find((x) => x.barcode === barcode);
+    if (p && !seenReady.has(barcode)) {
+      seenReady.add(barcode);
       ready.push(p);
     }
   }
 
   const scannedSet = new Set(scannedUnique);
-  const missing = expectedProducts.filter((p) => !scannedSet.has(p.epcTagId));
+  const missing = expectedProducts.filter((p) => !scannedSet.has(p.barcode));
 
-  const byEpc = new Map(masterItems.map((p) => [p.epcTagId, p]));
+  const byBarcode = new Map(masterItems.map((p) => [p.barcode, p]));
   const invalidTags: TransferScanReport["invalidTags"] = [];
 
-  for (const epc of scannedUnique) {
-    if (expectedEpcSet.has(epc)) continue;
-    const known = byEpc.get(epc) ?? null;
+  for (const barcode of scannedUnique) {
+    if (expectedBarcodeSet.has(barcode)) continue;
+    const known = byBarcode.get(barcode) ?? null;
     let reason: string;
     if (!known) {
       reason = "Not in inventory catalog";
-    } else if (known.locationId !== sourceLocationId) {
-      reason = `Tag is at ${known.location.name} (${known.location.floorLabel})`;
+    } else if (displayBin(known) !== sourceBinLocation) {
+      reason = `Item is in bin “${displayBin(known)}”`;
     } else {
-      reason = "Does not match design / SKU filter";
+      reason = "Does not match style / item / SKU filter";
     }
-    invalidTags.push({ epc, knownProduct: known, reason });
+    invalidTags.push({ barcode, knownProduct: known, reason });
   }
 
   return { ready, missing, invalidTags };
-}
-
-/**
- * Simulates an RFID read: mostly tags from the expected set, plus noise
- * (another location and/or unknown EPC) so Review can demonstrate all buckets.
- */
-export function generateMockTransferEpcs(
-  sourceLocationId: string,
-  expected: ProductDto[],
-  masterItems: ProductDto[],
-): string[] {
-  const out: string[] = [];
-  const expectedEpcs = expected.map((p) => p.epcTagId);
-
-  if (expected.length > 0) {
-    const take = Math.max(
-      1,
-      Math.min(4, Math.ceil(expected.length * 0.55)),
-    );
-    for (let i = 0; i < Math.min(take, expected.length); i++) {
-      out.push(expectedEpcs[i]);
-    }
-  }
-
-  const wrongLocation = masterItems.find(
-    (p) =>
-      p.locationId !== sourceLocationId &&
-      !expected.some((e) => e.epcTagId === p.epcTagId),
-  );
-  if (wrongLocation) {
-    out.push(wrongLocation.epcTagId);
-  }
-
-  out.push("DEADBEEF0000000000000001");
-
-  return [...new Set(out)];
 }

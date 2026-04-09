@@ -1,7 +1,14 @@
 import { StyleSheet, Text, View } from "react-native";
 import type { ProductDto } from "../types/inventory";
 import { theme } from "../theme/theme";
-import { formatProductStatus } from "../utils/formatProductStatus";
+import { formatStockLabel } from "../utils/formatStockLabel";
+import {
+  displayBin,
+  displayGrossWt,
+  displayItemName,
+  displaySku,
+  displayStyleCode,
+} from "../utils/productDisplay";
 
 type Props = {
   product: ProductDto;
@@ -34,16 +41,19 @@ export function ProductListItem({ product, tone }: Props) {
       ]}
     >
       <Text style={styles.title} numberOfLines={2}>
-        {product.designName}
+        {displayItemName(product)}
       </Text>
       <Text style={styles.lineDense} numberOfLines={1}>
-        SKU {product.skuCode} · {formatProductStatus(product.status)}
+        SKU {displaySku(product)} · {formatStockLabel(product.isSold)}
       </Text>
-      <Text style={styles.epc} numberOfLines={1}>
-        {product.epcTagId}
+      <Text style={styles.barcode} numberOfLines={1}>
+        {product.barcode}
+      </Text>
+      <Text style={styles.meta} numberOfLines={1}>
+        Style {displayStyleCode(product)} · {displayGrossWt(product)} g
       </Text>
       <Text style={styles.loc} numberOfLines={1}>
-        {product.location.name} · {product.location.floorLabel}
+        Bin {displayBin(product)}
       </Text>
     </View>
   );
@@ -73,11 +83,17 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     lineHeight: 22,
   },
-  epc: {
+  barcode: {
     color: theme.colors.textMuted,
     fontSize: theme.type.caption,
     fontWeight: "600",
     marginTop: 4,
+  },
+  meta: {
+    color: theme.colors.textMuted,
+    fontSize: theme.type.caption,
+    fontWeight: "600",
+    marginTop: 2,
   },
   loc: {
     color: theme.colors.textSecondary,

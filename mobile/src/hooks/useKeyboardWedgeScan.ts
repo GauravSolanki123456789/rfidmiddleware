@@ -28,8 +28,23 @@ export type KeyboardWedgeOptions = {
   pauseRefocusRef?: MutableRefObject<boolean>;
 };
 
+const BARCODE_8 = /^\d{8}$/;
+
+function dedupeOrderedSeed(barcodes: readonly string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const b of barcodes) {
+    const t = b.trim();
+    if (!BARCODE_8.test(t)) continue;
+    if (seen.has(t)) continue;
+    seen.add(t);
+    out.push(t);
+  }
+  return out;
+}
+
 /**
- * HID keyboard-wedge capture for Android RFID guns: rapid EPC + Enter.
+ * HID keyboard-wedge capture for Android RFID guns: rapid 8-digit barcode + Enter.
  * Batches count updates with requestAnimationFrame to reduce re-renders under burst scans.
  *
  * Refocus is narrowed: only when the wedge is enabled, app is active, and pause is off.
@@ -111,15 +126,20 @@ export function useKeyboardWedgeScan(
 
   const commitTag = useCallback(
     (raw: string) => {
-      const epc = raw.trim();
-      if (!epc) {
+      const code = raw.trim();
+      if (!code) {
         lineRef.current = "";
         setLine("");
         return;
       }
-      if (!seenRef.current.has(epc)) {
-        seenRef.current.add(epc);
-        scannedRef.current.push(epc);
+      if (!BARCODE_8.test(code)) {
+        lineRef.current = "";
+        setLine("");
+        return;
+      }
+      if (!seenRef.current.has(code)) {
+        seenRef.current.add(code);
+        scannedRef.current.push(code);
         scheduleCountUpdate();
       }
       lineRef.current = "";
@@ -163,12 +183,19 @@ export function useKeyboardWedgeScan(
     };
   }, []);
 
-  const reset = useCallback(() => {
-    scannedRef.current = [];
-    seenRef.current = new Set();
+  const reset = useCallback((seed?: readonly string[]) => {
+    if (seed && seed.length > 0) {
+      const ordered = dedupeOrderedSeed(seed);
+      scannedRef.current = [...ordered];
+      seenRef.current = new Set(ordered);
+      setCount(ordered.length);
+    } else {
+      scannedRef.current = [];
+      seenRef.current = new Set();
+      setCount(0);
+    }
     lineRef.current = "";
     setLine("");
-    setCount(0);
     if (rafRef.current != null) {
       cancelAnimationFrame(rafRef.current);
       rafRef.current = null;

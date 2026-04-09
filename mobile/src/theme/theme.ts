@@ -37,6 +37,7 @@ export const theme = {
     metricInStock: "#059669",
     metricMissing: "#E11D48",
     metricSold: "#475569",
+    metricBins: "#7C3AED",
   },
   shadow: {
     card: Platform.select<ViewStyle>({

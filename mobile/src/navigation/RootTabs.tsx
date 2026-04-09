@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Platform, StyleSheet } from "react-native";
 import { DashboardScreen } from "../screens/DashboardScreen";
+import { HistoryScreen } from "../screens/HistoryScreen";
 import { LocateItemScreen } from "../screens/LocateItemScreen";
 import { StockAuditScreen } from "../screens/StockAuditScreen";
 import { TransferScreen } from "../screens/TransferScreen";
@@ -9,7 +10,8 @@ import { theme } from "../theme/theme";
 
 export type RootTabParamList = {
   Dashboard: undefined;
-  StockAudit: undefined;
+  StockAudit: { resumeSessionId?: string } | undefined;
+  History: undefined;
   Transfer: undefined;
   LocateItem: undefined;
 };
@@ -124,6 +126,18 @@ export function RootTabs() {
           tabBarAccessibilityLabel: "Audit tab",
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="scan" color={color} size={size + 2} />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="History"
+        component={HistoryScreen}
+        options={{
+          title: "History",
+          tabBarLabel: "History",
+          tabBarAccessibilityLabel: "History tab",
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="time" color={color} size={size + 2} />
           ),
         }}
       />

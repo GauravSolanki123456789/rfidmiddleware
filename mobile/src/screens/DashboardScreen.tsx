@@ -1,23 +1,38 @@
-import { useCallback, useState } from "react";
+import { Ionicons } from "@expo/vector-icons";
+import { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  FlatList,
+  LayoutAnimation,
+  Platform,
+  Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
+  UIManager,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
 import { ErrorBanner } from "../components/ErrorBanner";
+import { LARGE_LIST_PROPS } from "../constants/listPerformance";
 import { useInventoryStore } from "../store/useInventoryStore";
 import { theme } from "../theme/theme";
+import { buildCatalogOverview, type StyleGroupRow } from "../utils/catalogGrouping";
 import { formatShortDateTime } from "../utils/formatTime";
 
+if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
 export function DashboardScreen() {
-  const { summary, loading, error, lastFetchedAt, loadDashboard } =
+  const { summary, loading, error, lastFetchedAt, items, loadDashboard } =
     useInventoryStore();
   const [refreshing, setRefreshing] = useState(false);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  const styleGroups = useMemo(() => buildCatalogOverview(items), [items]);
 
   useFocusEffect(
     useCallback(() => {
@@ -38,19 +53,97 @@ export function DashboardScreen() {
     void loadDashboard();
   }, [loadDashboard]);
 
-  return (
-    <SafeAreaView style={styles.safe} edges={["bottom", "left", "right"]}>
-      <ScrollView
-        contentContainerStyle={styles.scroll}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor={theme.colors.primary}
-            colors={[theme.colors.primary]}
-          />
-        }
-      >
+  const toggleStyle = useCallback((code: string) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(code)) next.delete(code);
+      else next.add(code);
+      return next;
+    });
+  }, []);
+
+  const renderStyleRow = useCallback(
+    ({ item }: { item: StyleGroupRow }) => {
+      const isOpen = expanded.has(item.styleCode);
+      return (
+        <View style={styles.styleBlock}>
+          <Pressable
+            onPress={() => toggleStyle(item.styleCode)}
+            style={({ pressed }) => [
+              styles.styleHeader,
+              pressed && { opacity: 0.92 },
+            ]}
+            accessibilityRole="button"
+            accessibilityState={{ expanded: isOpen }}
+            accessibilityLabel={`${item.styleCode}, ${item.totalCount} items. ${isOpen ? "Collapse" : "Expand"} SKU breakdown`}
+          >
+            <Ionicons
+              name={isOpen ? "chevron-down" : "chevron-forward"}
+              size={22}
+              color={theme.colors.primary}
+              style={styles.chevron}
+            />
+            <View style={styles.styleHeaderText}>
+              <Text style={styles.styleTitle} numberOfLines={2}>
+                {item.styleCode}
+              </Text>
+              <Text style={styles.styleMeta}>
+                {item.totalCount}{" "}
+                {item.totalCount === 1 ? "piece" : "pieces"}
+              </Text>
+            </View>
+          </Pressable>
+          {isOpen ? (
+            item.skuRows.length > 28 ? (
+              <ScrollView
+                nestedScrollEnabled
+                style={[styles.skuList, { maxHeight: 320 }]}
+                keyboardShouldPersistTaps="handled"
+              >
+                {item.skuRows.map((row) => (
+                  <View
+                    key={`${item.styleCode}::${row.sku}`}
+                    style={styles.skuRow}
+                  >
+                    <Text style={styles.skuLabel} numberOfLines={2}>
+                      {row.sku}
+                    </Text>
+                    <Text style={styles.skuCount}>
+                      {row.count}{" "}
+                      {row.count === 1 ? "item" : "items"}
+                    </Text>
+                  </View>
+                ))}
+              </ScrollView>
+            ) : (
+              <View style={styles.skuList}>
+                {item.skuRows.map((row) => (
+                  <View
+                    key={`${item.styleCode}::${row.sku}`}
+                    style={styles.skuRow}
+                  >
+                    <Text style={styles.skuLabel} numberOfLines={2}>
+                      {row.sku}
+                    </Text>
+                    <Text style={styles.skuCount}>
+                      {row.count}{" "}
+                      {row.count === 1 ? "item" : "items"}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            )
+          ) : null}
+        </View>
+      );
+    },
+    [expanded, toggleStyle],
+  );
+
+  const listHeader = useMemo(
+    () => (
+      <>
         {error ? (
           <ErrorBanner
             title="Could not load inventory"
@@ -76,7 +169,7 @@ export function DashboardScreen() {
               label="Total items"
               value={summary === null ? "—" : summary.totalItems}
               accent={theme.colors.metricTotal}
-              subtitle="All SKUs"
+              subtitle="ERP catalog"
             />
             <MetricCard
               label="In stock"
@@ -85,16 +178,18 @@ export function DashboardScreen() {
               subtitle="On floor"
             />
             <MetricCard
-              label="Missing"
-              value={summary === null ? "—" : summary.totalMissing}
-              accent={theme.colors.metricMissing}
-              subtitle="Needs attention"
+              label="Storage bins"
+              value={
+                summary === null ? "—" : (summary.distinctBinCount ?? 0)
+              }
+              accent={theme.colors.metricBins}
+              subtitle="Distinct bin codes"
             />
             <MetricCard
               label="Sold"
               value={summary === null ? "—" : summary.totalSold}
               accent={theme.colors.metricSold}
-              subtitle="Completed"
+              subtitle="Completed sales"
             />
           </View>
         )}
@@ -104,7 +199,48 @@ export function DashboardScreen() {
             Showing cached figures. Pull to refresh or tap Retry above.
           </Text>
         ) : null}
-      </ScrollView>
+
+        <View style={styles.catalogHeader}>
+          <Text style={styles.catalogTitle}>Catalog overview</Text>
+          <Text style={styles.catalogSub}>
+            By style code · expand to see SKU counts
+          </Text>
+        </View>
+      </>
+    ),
+    [error, lastFetchedAt, summary, loading, onRetry],
+  );
+
+  const listEmpty = useMemo(
+    () => (
+      <View style={styles.catalogEmpty}>
+        <Text style={styles.catalogEmptyText}>
+          No in-stock rows loaded. Pull to refresh.
+        </Text>
+      </View>
+    ),
+    [],
+  );
+
+  return (
+    <SafeAreaView style={styles.safe} edges={["bottom", "left", "right"]}>
+      <FlatList
+        data={styleGroups}
+        keyExtractor={(item) => item.styleCode}
+        renderItem={renderStyleRow}
+        ListHeaderComponent={listHeader}
+        ListEmptyComponent={!loading && items.length === 0 ? listEmpty : null}
+        contentContainerStyle={styles.listContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={theme.colors.primary}
+            colors={[theme.colors.primary]}
+          />
+        }
+        {...LARGE_LIST_PROPS}
+      />
     </SafeAreaView>
   );
 }
@@ -138,17 +274,18 @@ function MetricCard({
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: theme.colors.bg },
-  scroll: {
-    padding: theme.space.lg,
+  listContent: {
+    paddingHorizontal: theme.space.lg,
     paddingBottom: theme.space.xxl,
     flexGrow: 1,
-    gap: theme.space.md,
+    gap: theme.space.sm,
   },
   updated: {
     alignSelf: "center",
     color: theme.colors.textMuted,
     fontSize: theme.type.caption,
     fontWeight: "600",
+    marginBottom: theme.space.xs,
   },
   staleHint: {
     textAlign: "center",
@@ -158,6 +295,7 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     marginTop: theme.space.xs,
     paddingHorizontal: theme.space.md,
+    marginBottom: theme.space.sm,
   },
   loadingBlock: {
     paddingVertical: theme.space.xxl,
@@ -169,7 +307,7 @@ const styles = StyleSheet.create({
     fontSize: theme.type.body,
     fontWeight: "600",
   },
-  metrics: { gap: theme.space.md },
+  metrics: { gap: theme.space.md, marginBottom: theme.space.md },
   metricCard: {
     flexDirection: "row",
     backgroundColor: theme.colors.surface,
@@ -209,5 +347,89 @@ const styles = StyleSheet.create({
     fontSize: theme.type.caption,
     marginTop: theme.space.xs,
     fontWeight: "600",
+  },
+  catalogHeader: {
+    marginTop: theme.space.md,
+    marginBottom: theme.space.sm,
+    paddingTop: theme.space.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: theme.colors.border,
+  },
+  catalogTitle: {
+    fontSize: theme.type.section,
+    fontWeight: "900",
+    color: theme.colors.text,
+    letterSpacing: -0.3,
+  },
+  catalogSub: {
+    marginTop: 4,
+    fontSize: theme.type.caption,
+    fontWeight: "600",
+    color: theme.colors.textMuted,
+  },
+  catalogEmpty: {
+    paddingVertical: theme.space.xl,
+    alignItems: "center",
+  },
+  catalogEmptyText: {
+    color: theme.colors.textMuted,
+    fontSize: theme.type.body,
+    fontWeight: "600",
+  },
+  styleBlock: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    marginBottom: theme.space.sm,
+    overflow: "hidden",
+    ...theme.shadow.card,
+  },
+  styleHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: theme.space.md,
+    paddingHorizontal: theme.space.md,
+    gap: theme.space.sm,
+    minHeight: theme.touchMin,
+  },
+  chevron: { marginTop: 2 },
+  styleHeaderText: { flex: 1 },
+  styleTitle: {
+    fontSize: theme.type.bodyLarge,
+    fontWeight: "900",
+    color: theme.colors.text,
+  },
+  styleMeta: {
+    marginTop: 4,
+    fontSize: theme.type.caption,
+    fontWeight: "700",
+    color: theme.colors.textSecondary,
+  },
+  skuList: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: theme.colors.border,
+    backgroundColor: theme.colors.surfaceMuted,
+  },
+  skuRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: theme.space.md,
+    paddingVertical: theme.space.sm,
+    paddingHorizontal: theme.space.lg,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: theme.colors.border,
+  },
+  skuLabel: {
+    flex: 1,
+    fontSize: theme.type.body,
+    fontWeight: "700",
+    color: theme.colors.text,
+  },
+  skuCount: {
+    fontSize: theme.type.label,
+    fontWeight: "800",
+    color: theme.colors.primary,
   },
 });

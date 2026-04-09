@@ -20,4 +20,5 @@ process.on("SIGTERM", () => void shutdown("SIGTERM"));
 
 server.listen(env.PORT, () => {
   console.info(`HTTP server listening on port ${env.PORT} (${env.NODE_ENV})`);
+  console.info(`Status page: http://localhost:${env.PORT}/status`);
 });

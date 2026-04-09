@@ -4,6 +4,7 @@ import helmet from "helmet";
 import { env } from "./config/env.js";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
 import { registerRoutes } from "./routes/index.js";
+import { registerStatusPage } from "./routes/statusPage.js";
 
 export function createApp() {
   const app = express();
@@ -17,6 +18,7 @@ export function createApp() {
   );
   app.use(express.json({ limit: "1mb" }));
 
+  registerStatusPage(app);
   registerRoutes(app);
 
   app.use(notFoundHandler);

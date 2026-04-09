@@ -14,7 +14,13 @@ import { ErrorBanner } from "../components/ErrorBanner";
 import { useInventoryStore } from "../store/useInventoryStore";
 import type { ProductDto } from "../types/inventory";
 import { theme } from "../theme/theme";
-import { formatProductStatus } from "../utils/formatProductStatus";
+import {
+  displayBin,
+  displayGrossWt,
+  displayItemName,
+  displaySku,
+  displayStyleCode,
+} from "../utils/productDisplay";
 
 export function LocateItemScreen() {
   const { items, loadDashboard, error } = useInventoryStore();
@@ -31,8 +37,10 @@ export function LocateItemScreen() {
     if (!q) return [];
     return items.filter(
       (p) =>
-        p.designName.toLowerCase().includes(q) ||
-        p.skuCode.toLowerCase().includes(q),
+        displayItemName(p).toLowerCase().includes(q) ||
+        displaySku(p).toLowerCase().includes(q) ||
+        displayStyleCode(p).toLowerCase().includes(q) ||
+        p.barcode.includes(q),
     );
   }, [items, query]);
 
@@ -71,7 +79,7 @@ export function LocateItemScreen() {
         <TextInput
           value={query}
           onChangeText={setQuery}
-          placeholder="Design name or SKU"
+          placeholder="Item name, SKU, style, or barcode"
           placeholderTextColor={theme.colors.textMuted}
           autoCorrect={false}
           autoCapitalize="none"
@@ -82,34 +90,37 @@ export function LocateItemScreen() {
         />
       </View>
 
-      <FlatList
-        data={results}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.listContent}
-        keyboardShouldPersistTaps="handled"
-        ListHeaderComponent={listHeader}
-        {...LARGE_LIST_PROPS}
-        ListEmptyComponent={
-          <View style={styles.empty}>
-            <Ionicons
-              name="location-outline"
-              size={44}
-              color={theme.colors.textMuted}
-            />
-            <Text style={styles.emptyTitle}>
-              {query.trim().length === 0
-                ? "Search to find an item"
-                : "No items match"}
-            </Text>
-            <Text style={styles.emptySub}>
-              {query.trim().length === 0
-                ? "Enter a design name or SKU code."
-                : "Try another keyword or check spelling."}
-            </Text>
-          </View>
-        }
-        renderItem={({ item }) => <LocateCard product={item} />}
-      />
+      <View style={styles.listWrap}>
+        <FlatList
+          style={styles.flex}
+          data={results}
+          keyExtractor={(item) => String(item.id)}
+          contentContainerStyle={styles.listContent}
+          keyboardShouldPersistTaps="handled"
+          ListHeaderComponent={listHeader}
+          {...LARGE_LIST_PROPS}
+          ListEmptyComponent={
+            <View style={styles.empty}>
+              <Ionicons
+                name="location-outline"
+                size={44}
+                color={theme.colors.textMuted}
+              />
+              <Text style={styles.emptyTitle}>
+                {query.trim().length === 0
+                  ? "Search to find an item"
+                  : "No items match"}
+              </Text>
+              <Text style={styles.emptySub}>
+                {query.trim().length === 0
+                  ? "Search by item name, SKU, style code, or 8-digit barcode."
+                  : "Try another keyword or check spelling."}
+              </Text>
+            </View>
+          }
+          renderItem={({ item }) => <LocateCard product={item} />}
+        />
+      </View>
     </SafeAreaView>
   );
 }
@@ -118,20 +129,23 @@ function LocateCard({ product }: { product: ProductDto }) {
   return (
     <View style={styles.card}>
       <Text style={styles.cardTitle} numberOfLines={2}>
-        {product.designName}
+        {displayItemName(product)}
       </Text>
-      <Text style={styles.cardSku}>SKU · {product.skuCode}</Text>
+      <Text style={styles.cardSku}>SKU · {displaySku(product)}</Text>
       <Text style={styles.locLine} numberOfLines={1}>
-        {product.location.name} · {product.location.floorLabel}
+        Bin {displayBin(product)}
       </Text>
       <Text style={styles.meta} numberOfLines={1}>
-        EPC {product.epcTagId} · {formatProductStatus(product.status)}
+        Barcode {product.barcode} · Style {displayStyleCode(product)} ·{" "}
+        {displayGrossWt(product)} g
       </Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  flex: { flex: 1 },
+  listWrap: { flex: 1, minHeight: 0 },
   safe: { flex: 1, backgroundColor: theme.colors.bg },
   syncBanner: {
     paddingHorizontal: theme.space.lg,
@@ -163,7 +177,6 @@ const styles = StyleSheet.create({
   listContent: {
     paddingHorizontal: theme.space.lg,
     paddingBottom: theme.space.xxl,
-    flexGrow: 1,
   },
   resultBar: {
     paddingBottom: theme.space.sm,

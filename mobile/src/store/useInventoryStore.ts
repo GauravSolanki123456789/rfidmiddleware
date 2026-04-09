@@ -1,10 +1,6 @@
 import { create } from "zustand";
-import {
-  fetchInventorySummary,
-  fetchMasterList,
-  postInventoryAudit,
-} from "../api/inventoryClient";
-import type { AuditResultDto, InventorySummaryDto, ProductDto } from "../types/inventory";
+import { fetchInventorySummary, fetchMasterList } from "../api/inventoryClient";
+import type { InventorySummaryDto, ProductDto } from "../types/inventory";
 
 function errorMessage(err: unknown): string {
   if (err instanceof Error) return err.message;
@@ -17,28 +13,46 @@ interface InventoryState {
   loading: boolean;
   error: string | null;
   lastFetchedAt: number | null;
-
-  auditResult: AuditResultDto | null;
-  auditLoading: boolean;
-  auditError: string | null;
+  /** Advanced audit filter: specific SKUs; empty = no SKU restriction. */
+  selectedSkus: string[];
 
   loadDashboard: () => Promise<void>;
   refreshMasterList: () => Promise<void>;
-  runAudit: (input: { locationId: string; scannedEpcs: string[] }) => Promise<void>;
-  clearAudit: () => void;
+  setSelectedSkus: (skus: string[]) => void;
+  toggleSku: (sku: string) => void;
+  setSkusForStyle: (skus: string[], selected: boolean) => void;
+  clearSelectedSkus: () => void;
 }
 
 export const useInventoryStore = create<InventoryState>((set) => ({
   items: [],
   summary: null,
-  /** True until the first dashboard load finishes (avoids empty metric flash). */
   loading: true,
   error: null,
   lastFetchedAt: null,
+  selectedSkus: [],
 
-  auditResult: null,
-  auditLoading: false,
-  auditError: null,
+  setSelectedSkus: (skus) => set({ selectedSkus: [...new Set(skus)] }),
+
+  toggleSku: (sku) =>
+    set((s) => {
+      const cur = new Set(s.selectedSkus);
+      if (cur.has(sku)) cur.delete(sku);
+      else cur.add(sku);
+      return { selectedSkus: [...cur].sort((a, b) => a.localeCompare(b)) };
+    }),
+
+  setSkusForStyle: (skus, selected) =>
+    set((state) => {
+      const cur = new Set(state.selectedSkus);
+      for (const x of skus) {
+        if (selected) cur.add(x);
+        else cur.delete(x);
+      }
+      return { selectedSkus: [...cur].sort((a, b) => a.localeCompare(b)) };
+    }),
+
+  clearSelectedSkus: () => set({ selectedSkus: [] }),
 
   loadDashboard: async () => {
     set({ loading: true, error: null });
@@ -66,30 +80,4 @@ export const useInventoryStore = create<InventoryState>((set) => ({
       set({ error: errorMessage(e) });
     }
   },
-
-  runAudit: async ({ locationId, scannedEpcs }) => {
-    set({ auditLoading: true, auditError: null });
-    try {
-      const auditResult = await postInventoryAudit({ locationId, scannedEpcs });
-      set({ auditResult, auditLoading: false });
-      try {
-        const [summary, items] = await Promise.all([
-          fetchInventorySummary(),
-          fetchMasterList(),
-        ]);
-        set({
-          summary,
-          items,
-          lastFetchedAt: Date.now(),
-          error: null,
-        });
-      } catch (e) {
-        set({ error: errorMessage(e) });
-      }
-    } catch (e) {
-      set({ auditLoading: false, auditError: errorMessage(e) });
-    }
-  },
-
-  clearAudit: () => set({ auditResult: null, auditError: null }),
 }));

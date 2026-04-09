@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "RFID Inventory",
-    "slug": "rfid-inventory",
+    "slug": "rfidmiddleware",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -22,10 +22,23 @@
       },
       "usesCleartextTraffic": true,
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.gauravsolankisorganization.rfidmiddleware"
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "c403355f-6332-4369-b305-8c5564281777"
+      }
+    },
+    "owner": "gauravsolankis-organization",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/c403355f-6332-4369-b305-8c5564281777"
     }
   }
 }

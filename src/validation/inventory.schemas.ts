@@ -1,6 +1,11 @@
 import type { Request } from "express";
 import { z } from "zod";
 
+const barcode8 = z
+  .string()
+  .trim()
+  .regex(/^\d{8}$/, "Must be exactly 8 digits (0–9)");
+
 function getQueryParam(value: unknown): string | undefined {
   if (Array.isArray(value)) {
     const first = value[0];
@@ -16,37 +21,39 @@ function getQueryParam(value: unknown): string | undefined {
 }
 
 export const masterListQuerySchema = z.object({
-  locationId: z.string().uuid().optional(),
-  designName: z.string().min(1).optional(),
-  skuCode: z.string().min(1).optional(),
+  binLocation: z.string().min(1).optional(),
+  styleCode: z.string().min(1).optional(),
+  sku: z.string().min(1).optional(),
+  itemName: z.string().min(1).optional(),
 });
 
 export type MasterListQuery = z.infer<typeof masterListQuerySchema>;
 
 export function parseMasterListQuery(query: Request["query"]): MasterListQuery {
   return masterListQuerySchema.parse({
-    locationId: getQueryParam(query.locationId),
-    designName: getQueryParam(query.designName),
-    skuCode: getQueryParam(query.skuCode),
+    binLocation: getQueryParam(query.binLocation),
+    styleCode: getQueryParam(query.styleCode),
+    sku: getQueryParam(query.sku),
+    itemName: getQueryParam(query.itemName),
   });
 }
 
 export const auditBodySchema = z.object({
-  scannedEpcs: z
-    .array(z.string().min(1))
+  binLocation: z.string().min(1).trim(),
+  scannedBarcodes: z
+    .array(barcode8)
     .max(10_000)
     .transform((arr) => arr.map((s) => s.trim())),
-  locationId: z.string().uuid(),
 });
 
 export type AuditBody = z.infer<typeof auditBodySchema>;
 
 export const transferBodySchema = z.object({
-  epcTagIds: z
-    .array(z.string().min(1))
+  barcodes: z
+    .array(barcode8)
     .max(10_000)
     .transform((arr) => arr.map((s) => s.trim())),
-  newLocationId: z.string().uuid(),
+  newBinLocation: z.string().min(1).trim(),
 });
 
 export type TransferBody = z.infer<typeof transferBodySchema>;

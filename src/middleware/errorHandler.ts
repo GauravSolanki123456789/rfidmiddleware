@@ -9,6 +9,37 @@ function formatZodError(err: ZodError) {
   return err.flatten();
 }
 
+/**
+ * Single-line message for clients (mobile); keeps structured `details` for debugging.
+ */
+function zodUserFacingMessage(err: ZodError): string {
+  const issues = err.issues;
+
+  const mentionsBarcodeField = issues.some((i) =>
+    i.path.some((seg) => {
+      if (typeof seg !== "string") return false;
+      return /^(scannedBarcodes|barcodes|barcode)$/i.test(seg);
+    }),
+  );
+  const isEightDigitRule = issues.some((i) => /8\s*digits/i.test(i.message));
+  if (mentionsBarcodeField && isEightDigitRule) {
+    return "Invalid barcode: each value must be exactly 8 digits (0–9), with no spaces or letters.";
+  }
+
+  if (issues.length === 1 && issues[0]) {
+    return issues[0].message;
+  }
+
+  const text = issues
+    .map((i) => {
+      const path = i.path.length ? `${i.path.join(".")}: ` : "";
+      return `${path}${i.message}`;
+    })
+    .join(" ")
+    .trim();
+  return text || "Validation failed";
+}
+
 function prismaErrorMessage(err: Prisma.PrismaClientKnownRequestError): {
   status: number;
   message: string;
@@ -74,7 +105,7 @@ export function errorHandler(
     res.status(HttpStatus.UNPROCESSABLE_ENTITY).json({
       success: false,
       error: {
-        message: "Validation failed",
+        message: zodUserFacingMessage(err),
         details: formatZodError(err),
       },
     });

@@ -1,9 +1,7 @@
-import { ProductStatus } from "@prisma/client";
 import { Router } from "express";
-import { AppError } from "../errors/AppError.js";
-import { HttpStatus } from "../errors/httpStatus.js";
 import { prisma } from "../db/prisma.js";
 import { asyncHandler } from "../middleware/asyncHandler.js";
+import { binLocationToDbValue } from "../utils/binLocationDb.js";
 import { serializeProduct } from "../utils/productSerialization.js";
 import {
   auditBodySchema,
@@ -16,12 +14,16 @@ export const inventoryRouter = Router();
 inventoryRouter.get(
   "/inventory/summary",
   asyncHandler(async (_req, res) => {
-    const [totalInStock, totalMissing, totalSold] = await Promise.all([
-      prisma.product.count({ where: { status: ProductStatus.IN_STOCK } }),
-      prisma.product.count({ where: { status: ProductStatus.MISSING } }),
-      prisma.product.count({ where: { status: ProductStatus.SOLD } }),
+    const [totalInStock, totalSold, binGroups] = await Promise.all([
+      prisma.product.count({ where: { isSold: false } }),
+      prisma.product.count({ where: { isSold: true } }),
+      prisma.product.groupBy({
+        by: ["binLocation"],
+      }),
     ]);
-    const totalItems = totalInStock + totalMissing + totalSold;
+    const totalItems = totalInStock + totalSold;
+    const totalMissing = 0;
+    const distinctBinCount = binGroups.length;
 
     res.json({
       success: true,
@@ -30,6 +32,7 @@ inventoryRouter.get(
         totalInStock,
         totalMissing,
         totalSold,
+        distinctBinCount,
       },
     });
   }),
@@ -42,27 +45,36 @@ inventoryRouter.get(
 
     const products = await prisma.product.findMany({
       where: {
-        status: ProductStatus.IN_STOCK,
-        ...(query.locationId !== undefined ? { locationId: query.locationId } : {}),
-        ...(query.designName !== undefined
+        isSold: false,
+        ...(query.binLocation !== undefined
+          ? { binLocation: binLocationToDbValue(query.binLocation) }
+          : {}),
+        ...(query.styleCode !== undefined
           ? {
-              designName: {
-                contains: query.designName,
+              styleCode: {
+                contains: query.styleCode,
                 mode: "insensitive",
               },
             }
           : {}),
-        ...(query.skuCode !== undefined
+        ...(query.sku !== undefined
           ? {
-              skuCode: {
-                equals: query.skuCode,
+              sku: {
+                equals: query.sku,
+                mode: "insensitive",
+              },
+            }
+          : {}),
+        ...(query.itemName !== undefined
+          ? {
+              itemName: {
+                contains: query.itemName,
                 mode: "insensitive",
               },
             }
           : {}),
       },
-      include: { location: true },
-      orderBy: [{ skuCode: "asc" }, { epcTagId: "asc" }],
+      orderBy: [{ sku: "asc" }, { barcode: "asc" }],
     });
 
     res.json({
@@ -79,34 +91,28 @@ inventoryRouter.post(
   asyncHandler(async (req, res) => {
     const body = auditBodySchema.parse(req.body);
 
-    const location = await prisma.location.findUnique({
-      where: { id: body.locationId },
-    });
-    if (!location) {
-      throw new AppError("Location not found", HttpStatus.NOT_FOUND);
-    }
+    const dbBin = binLocationToDbValue(body.binLocation);
 
     const expected = await prisma.product.findMany({
       where: {
-        locationId: body.locationId,
-        status: ProductStatus.IN_STOCK,
+        binLocation: dbBin,
+        isSold: false,
       },
-      include: { location: true },
     });
 
-    const expectedEpcSet = new Set(expected.map((p) => p.epcTagId));
-    const scannedSet = new Set(body.scannedEpcs);
+    const expectedBarcodeSet = new Set(expected.map((p) => p.barcode));
+    const scannedSet = new Set(body.scannedBarcodes);
 
-    const foundItems = expected.filter((p) => scannedSet.has(p.epcTagId));
-    const missingItems = expected.filter((p) => !scannedSet.has(p.epcTagId));
+    const foundItems = expected.filter((p) => scannedSet.has(p.barcode));
+    const missingItems = expected.filter((p) => !scannedSet.has(p.barcode));
 
     const unknownItems: string[] = [];
     const seenUnknown = new Set<string>();
-    for (const epc of body.scannedEpcs) {
-      if (expectedEpcSet.has(epc)) continue;
-      if (seenUnknown.has(epc)) continue;
-      seenUnknown.add(epc);
-      unknownItems.push(epc);
+    for (const barcode of body.scannedBarcodes) {
+      if (expectedBarcodeSet.has(barcode)) continue;
+      if (seenUnknown.has(barcode)) continue;
+      seenUnknown.add(barcode);
+      unknownItems.push(barcode);
     }
 
     res.json({
@@ -125,21 +131,14 @@ inventoryRouter.put(
   asyncHandler(async (req, res) => {
     const body = transferBodySchema.parse(req.body);
 
-    const location = await prisma.location.findUnique({
-      where: { id: body.newLocationId },
-    });
-    if (!location) {
-      throw new AppError("Location not found", HttpStatus.NOT_FOUND);
-    }
-
-    if (body.epcTagIds.length === 0) {
+    if (body.barcodes.length === 0) {
       res.json({ success: true, data: { updatedCount: 0 } });
       return;
     }
 
     const result = await prisma.product.updateMany({
-      where: { epcTagId: { in: body.epcTagIds } },
-      data: { locationId: body.newLocationId },
+      where: { barcode: { in: body.barcodes } },
+      data: { binLocation: binLocationToDbValue(body.newBinLocation) },
     });
 
     res.json({

@@ -2,7 +2,6 @@ import { getApiBaseUrl } from "../config/api";
 import type {
   ApiErrorBody,
   ApiSuccess,
-  AuditResultDto,
   InventorySummaryDto,
   ProductDto,
   TransferResultDto,
@@ -43,6 +42,15 @@ function networkFailureMessage(err: unknown): string {
   return "Network error — could not reach the server.";
 }
 
+function buildQuery(params: Record<string, string | undefined>): string {
+  const sp = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== "") sp.set(k, v);
+  }
+  const q = sp.toString();
+  return q ? `?${q}` : "";
+}
+
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   const url = `${getApiBaseUrl()}${path}`;
   let res: Response;
@@ -74,42 +82,39 @@ export async function fetchInventorySummary(): Promise<InventorySummaryDto> {
   return body.data;
 }
 
-export async function fetchMasterList(): Promise<ProductDto[]> {
+export type MasterListQuery = {
+  binLocation?: string;
+  styleCode?: string;
+  sku?: string;
+  itemName?: string;
+};
+
+export async function fetchMasterList(
+  query?: MasterListQuery,
+): Promise<ProductDto[]> {
+  const q = buildQuery({
+    binLocation: query?.binLocation,
+    styleCode: query?.styleCode,
+    sku: query?.sku,
+    itemName: query?.itemName,
+  });
   const body = await requestJson<ApiSuccess<{ items: ProductDto[] }>>(
-    "/inventory/master-list",
+    `/inventory/master-list${q}`,
   );
   return body.data.items;
 }
 
-export async function postInventoryAudit(input: {
-  locationId: string;
-  scannedEpcs: string[];
-}): Promise<AuditResultDto> {
-  const body = await requestJson<ApiSuccess<AuditResultDto>>(
-    "/inventory/audit",
-    {
-      method: "POST",
-      body: JSON.stringify({
-        locationId: input.locationId,
-        scannedEpcs: input.scannedEpcs,
-      }),
-    },
-  );
-  return body.data;
-}
-
-/** Backend expects `epcTagIds` and `newLocationId` (see `transferBodySchema`). */
 export async function putInventoryTransfer(input: {
-  epcTagIds: string[];
-  newLocationId: string;
+  barcodes: string[];
+  newBinLocation: string;
 }): Promise<TransferResultDto> {
   const body = await requestJson<ApiSuccess<TransferResultDto>>(
     "/inventory/transfer",
     {
       method: "PUT",
       body: JSON.stringify({
-        epcTagIds: input.epcTagIds,
-        newLocationId: input.newLocationId,
+        barcodes: input.barcodes,
+        newBinLocation: input.newBinLocation,
       }),
     },
   );

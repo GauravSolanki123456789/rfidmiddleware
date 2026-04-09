@@ -21,3 +21,6 @@ npm run dev
 cd mobile
 npm install
 npx expo start
+npx eas-cli@latest build -p android --profile preview
+npx eas-cli@latest update --branch preview --message "fixed stock audit bug"
+eas update --branch preview --message "Fixed share button color"

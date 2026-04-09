@@ -30,7 +30,7 @@ import {
   filterExpectedTransferItems,
   type TransferScanReport,
 } from "../utils/transferScan";
-import { uniqueLocationsFromProducts } from "../utils/locations";
+import { uniqueBinLocationsFromProducts } from "../utils/bins";
 
 type Step = 1 | 2 | 3;
 
@@ -39,32 +39,33 @@ export function TransferScreen() {
   const isFocused = useIsFocused();
 
   const [step, setStep] = useState<Step>(1);
-  const [sourceLocationId, setSourceLocationId] = useState("");
-  const [destinationLocationId, setDestinationLocationId] = useState("");
-  const [designFilter, setDesignFilter] = useState("");
+  const [sourceBin, setSourceBin] = useState("");
+  const [destinationBin, setDestinationBin] = useState("");
+  const [itemNameFilter, setItemNameFilter] = useState("");
+  const [styleCodeFilter, setStyleCodeFilter] = useState("");
   const [skuFilter, setSkuFilter] = useState("");
   const [report, setReport] = useState<TransferScanReport | null>(null);
   const [transferLoading, setTransferLoading] = useState(false);
 
-  const locations = useMemo(
-    () => uniqueLocationsFromProducts(items),
+  const bins = useMemo(
+    () => uniqueBinLocationsFromProducts(items),
     [items],
   );
 
-  const designTrim = designFilter.trim() || undefined;
+  const itemNameTrim = itemNameFilter.trim() || undefined;
+  const styleTrim = styleCodeFilter.trim() || undefined;
   const skuTrim = skuFilter.trim() || undefined;
 
   const expectedProducts = useMemo(
     () =>
-      sourceLocationId
-        ? filterExpectedTransferItems(
-            items,
-            sourceLocationId,
-            designTrim,
+      sourceBin
+        ? filterExpectedTransferItems(items, sourceBin, {
+            itemNameTrim,
+            styleCodeTrim: styleTrim,
             skuTrim,
-          )
+          })
         : [],
-    [items, sourceLocationId, designTrim, skuTrim],
+    [items, sourceBin, itemNameTrim, styleTrim, skuTrim],
   );
 
   const wedgeEnabled = isFocused && step === 2;
@@ -89,17 +90,17 @@ export function TransferScreen() {
   );
 
   useEffect(() => {
-    if (sourceLocationId) return;
-    if (locations.length === 0) return;
-    setSourceLocationId(locations[0].id);
-  }, [locations, sourceLocationId]);
+    if (sourceBin) return;
+    if (bins.length === 0) return;
+    setSourceBin(bins[0]!);
+  }, [bins, sourceBin]);
 
   useEffect(() => {
-    if (destinationLocationId) return;
-    if (locations.length < 2) return;
-    const alt = locations.find((l) => l.id !== sourceLocationId);
-    if (alt) setDestinationLocationId(alt.id);
-  }, [locations, destinationLocationId, sourceLocationId]);
+    if (destinationBin) return;
+    if (bins.length < 2) return;
+    const alt = bins.find((b) => b !== sourceBin);
+    if (alt) setDestinationBin(alt);
+  }, [bins, destinationBin, sourceBin]);
 
   const resetWizard = useCallback(() => {
     resetWedge();
@@ -108,17 +109,18 @@ export function TransferScreen() {
   }, [resetWedge]);
 
   const onStartSession = () => {
-    if (!sourceLocationId || !destinationLocationId) {
+    const dest = destinationBin.trim();
+    if (!sourceBin || !dest) {
       Alert.alert(
-        "Locations required",
-        "Choose both a source and a destination.",
+        "Bins required",
+        "Choose a source bin and enter a destination bin.",
       );
       return;
     }
-    if (sourceLocationId === destinationLocationId) {
+    if (sourceBin === dest) {
       Alert.alert(
         "Invalid destination",
-        "Source and destination must be different locations.",
+        "Source and destination bins must be different.",
       );
       return;
     }
@@ -127,20 +129,20 @@ export function TransferScreen() {
   };
 
   const onFinishTransferScan = () => {
-    if (!sourceLocationId) {
-      Alert.alert("Source required", "Go back and select a source location.");
+    if (!sourceBin) {
+      Alert.alert("Source required", "Go back and select a source bin.");
       return;
     }
     const scanned = getWedgeScanned();
     if (scanned.length === 0) {
       Alert.alert(
-        "No tags yet",
-        "Scan at least one EPC with the hardware trigger, then finish.",
+        "No barcodes yet",
+        "Scan at least one 8-digit barcode with the hardware trigger, then finish.",
       );
       return;
     }
     const next = buildTransferScanReport(
-      sourceLocationId,
+      sourceBin,
       expectedProducts,
       scanned,
       items,
@@ -151,12 +153,13 @@ export function TransferScreen() {
   };
 
   const onConfirmTransfer = useCallback(async () => {
-    if (!report || !destinationLocationId) return;
-    const ids = report.ready.map((p) => p.epcTagId);
-    if (ids.length === 0) {
+    const dest = destinationBin.trim();
+    if (!report || !dest) return;
+    const barcodes = report.ready.map((p) => p.barcode);
+    if (barcodes.length === 0) {
       Alert.alert(
         "Nothing to move",
-        "There are no valid tags in “Ready to transfer”. Scan again or adjust filters.",
+        "There are no valid items in “Ready to transfer”. Scan again or adjust filters.",
       );
       return;
     }
@@ -164,17 +167,14 @@ export function TransferScreen() {
     setTransferLoading(true);
     try {
       const result = await putInventoryTransfer({
-        epcTagIds: ids,
-        newLocationId: destinationLocationId,
+        barcodes,
+        newBinLocation: dest,
       });
       await refreshMasterList();
       await loadDashboard();
-      const destName =
-        locations.find((l) => l.id === destinationLocationId)?.name ??
-        "destination";
       Alert.alert(
         "Transfer complete",
-        `${result.updatedCount} item(s) moved to ${destName}.`,
+        `${result.updatedCount} item(s) moved to bin “${dest}”.`,
       );
       resetWizard();
     } catch (e) {
@@ -187,17 +187,14 @@ export function TransferScreen() {
     }
   }, [
     report,
-    destinationLocationId,
+    destinationBin,
     refreshMasterList,
     loadDashboard,
-    locations,
     resetWizard,
   ]);
 
-  const destLabel =
-    locations.find((l) => l.id === destinationLocationId)?.name ?? "—";
-  const sourceLabel =
-    locations.find((l) => l.id === sourceLocationId)?.name ?? "—";
+  const destLabel = destinationBin.trim() || "—";
+  const sourceLabel = sourceBin || "—";
 
   const transferListRows = useMemo(
     () => (report ? transferReportToFlatListRows(report) : []),
@@ -233,7 +230,7 @@ export function TransferScreen() {
           }
           return (
             <View style={styles.invalidUnknown}>
-              <Text style={styles.invalidEpc}>{item.row.epc}</Text>
+              <Text style={styles.invalidBarcode}>{item.row.barcode}</Text>
               <Text style={styles.invalidReason}>{item.row.reason}</Text>
             </View>
           );
@@ -279,8 +276,8 @@ export function TransferScreen() {
           <View style={styles.review}>
             <Text style={styles.reviewTitle}>Review & report</Text>
             <Text style={styles.reviewSub}>
-              Move to <Text style={styles.em}>{destLabel}</Text>. Confirm only
-              when the “Ready” list matches what you physically have.
+              Move to bin <Text style={styles.em}>{destLabel}</Text>. Confirm
+              only when the “Ready” list matches what you physically have.
             </Text>
 
             <View style={styles.summaryGrid}>
@@ -331,7 +328,7 @@ export function TransferScreen() {
             variant="primary"
             loading={transferLoading}
             disabled={report.ready.length === 0}
-            accessibilityHint="PUT /inventory/transfer for valid EPCs"
+            accessibilityHint="PUT /inventory/transfer for scanned barcodes"
             icon={
               <Ionicons
                 name="checkmark-circle"
@@ -416,65 +413,63 @@ export function TransferScreen() {
             <View style={styles.card}>
               <Text style={styles.cardTitle}>Session setup</Text>
               <Text style={styles.cardSub}>
-                Pick where stock is leaving and where it should go. Optional
-                filters narrow which SKUs are in scope (same rules as the server
-                master list).
+                Pick the source bin and where stock should move. Optional filters
+                narrow which rows are in scope (aligned with the server master
+                list).
               </Text>
 
-              <Text style={styles.fieldLabel}>Source location</Text>
+              <Text style={styles.fieldLabel}>Source bin</Text>
               <View style={styles.pickerWrap}>
                 <Picker
-                  selectedValue={sourceLocationId}
-                  onValueChange={(v) => setSourceLocationId(String(v))}
+                  selectedValue={sourceBin}
+                  onValueChange={(v) => setSourceBin(String(v))}
                   mode="dropdown"
                   style={styles.picker}
                   dropdownIconColor={theme.colors.text}
                 >
-                  {locations.length === 0 ? (
-                    <Picker.Item label="No locations" value="" />
+                  {bins.length === 0 ? (
+                    <Picker.Item label="No bins in catalog" value="" />
                   ) : null}
-                  {locations.map((loc) => (
-                    <Picker.Item
-                      key={loc.id}
-                      label={`${loc.name} · ${loc.floorLabel}`}
-                      value={loc.id}
-                    />
+                  {bins.map((bin) => (
+                    <Picker.Item key={bin} label={bin} value={bin} />
                   ))}
                 </Picker>
               </View>
 
-              <Text style={styles.fieldLabel}>Destination location</Text>
-              <View style={styles.pickerWrap}>
-                <Picker
-                  selectedValue={destinationLocationId}
-                  onValueChange={(v) => setDestinationLocationId(String(v))}
-                  mode="dropdown"
-                  style={styles.picker}
-                  dropdownIconColor={theme.colors.text}
-                >
-                  {locations.length === 0 ? (
-                    <Picker.Item label="No locations" value="" />
-                  ) : null}
-                  {locations.map((loc) => (
-                    <Picker.Item
-                      key={loc.id}
-                      label={`${loc.name} · ${loc.floorLabel}`}
-                      value={loc.id}
-                    />
-                  ))}
-                </Picker>
-              </View>
-
-              <Text style={styles.fieldLabel}>Design name (optional)</Text>
+              <Text style={styles.fieldLabel}>Destination bin</Text>
               <TextInput
-                value={designFilter}
-                onChangeText={setDesignFilter}
+                value={destinationBin}
+                onChangeText={setDestinationBin}
+                placeholder="Type bin code (e.g. VAULT-A2)"
+                placeholderTextColor={theme.colors.textMuted}
+                autoCorrect={false}
+                autoCapitalize="characters"
+                style={styles.input}
+                accessibilityLabel="Destination bin code"
+              />
+
+              <Text style={styles.fieldLabel}>Item name (optional)</Text>
+              <TextInput
+                value={itemNameFilter}
+                onChangeText={setItemNameFilter}
                 placeholder="Contains, case-insensitive"
                 placeholderTextColor={theme.colors.textMuted}
                 autoCorrect={false}
                 autoCapitalize="none"
                 style={styles.input}
-                accessibilityLabel="Filter by design name"
+                accessibilityLabel="Filter by item name"
+              />
+
+              <Text style={styles.fieldLabel}>Style code (optional)</Text>
+              <TextInput
+                value={styleCodeFilter}
+                onChangeText={setStyleCodeFilter}
+                placeholder="Contains, case-insensitive"
+                placeholderTextColor={theme.colors.textMuted}
+                autoCorrect={false}
+                autoCapitalize="none"
+                style={styles.input}
+                accessibilityLabel="Filter by style code"
               />
 
               <Text style={styles.fieldLabel}>SKU (optional)</Text>
@@ -496,7 +491,7 @@ export function TransferScreen() {
                   color={theme.colors.primary}
                 />
                 <Text style={styles.hintText}>
-                  {expectedProducts.length} in-stock item(s) match this scope at{" "}
+                  {expectedProducts.length} available item(s) match this scope in{" "}
                   {sourceLabel}.
                 </Text>
               </View>
@@ -504,7 +499,12 @@ export function TransferScreen() {
               <PrimaryButton
                 label="Start scanning session"
                 onPress={onStartSession}
-                disabled={locations.length < 2}
+                disabled={
+                  bins.length === 0 ||
+                  !sourceBin ||
+                  !destinationBin.trim() ||
+                  sourceBin === destinationBin.trim()
+                }
                 variant="primary"
                 accessibilityHint="Begins step 2: hardware RFID scan"
                 icon={
@@ -523,24 +523,27 @@ export function TransferScreen() {
               <Text style={styles.cardTitle}>Active scan</Text>
               <Text style={styles.cardSub}>
                 From <Text style={styles.em}>{sourceLabel}</Text>
-                {designTrim || skuTrim ? (
+                {itemNameTrim || styleTrim || skuTrim ? (
                   <>
                     {" "}
                     · filtered
-                    {designTrim ? (
-                      <Text style={styles.em}> · design “{designTrim}”</Text>
+                    {itemNameTrim ? (
+                      <Text style={styles.em}> · item “{itemNameTrim}”</Text>
+                    ) : null}
+                    {styleTrim ? (
+                      <Text style={styles.em}> · style “{styleTrim}”</Text>
                     ) : null}
                     {skuTrim ? (
                       <Text style={styles.em}> · SKU {skuTrim}</Text>
                     ) : null}
                   </>
                 ) : null}
-                . Use the RFID gun — each tag is sent as keyboard text ending
-                with Enter. The hidden field stays focused to catch every read.
+                . Use the RFID gun — each read sends an 8-digit barcode and
+                Enter. The hidden field stays focused to catch every read.
               </Text>
 
               <View style={styles.counterCard} accessibilityRole="summary">
-                <Text style={styles.counterLabel}>Tags scanned</Text>
+                <Text style={styles.counterLabel}>Barcodes scanned</Text>
                 <Text style={styles.counterValue}>{wedgeCount}</Text>
                 <Text style={styles.counterHint}>
                   When you are done sweeping, finish to build the transfer
@@ -552,7 +555,7 @@ export function TransferScreen() {
                 label="Finish scan & view report"
                 onPress={onFinishTransferScan}
                 variant="primary"
-                accessibilityHint="Builds review from scanned EPCs"
+                accessibilityHint="Builds review from scanned barcodes"
                 icon={
                   <Ionicons
                     name="checkmark-done"
@@ -872,7 +875,7 @@ const styles = StyleSheet.create({
     padding: theme.space.md,
     marginBottom: theme.space.sm,
   },
-  invalidEpc: {
+  invalidBarcode: {
     color: theme.colors.danger,
     fontSize: theme.type.bodyLarge,
     fontWeight: "900",
