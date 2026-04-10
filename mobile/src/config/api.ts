@@ -1,11 +1,14 @@
 import Constants from "expo-constants";
 import { Platform } from "react-native";
+import { useSettingsStore } from "../store/useSettingsStore";
 
 /**
+ * Build-time / emulator defaults (no in-app override).
  * Default: Android emulator → host machine via 10.0.2.2.
- * Physical device: set EXPO_PUBLIC_API_BASE_URL (e.g. http://192.168.1.10:3000/api).
+ * Physical device: set EXPO_PUBLIC_API_BASE_URL (e.g. http://192.168.1.10:3000/api)
+ * or use Dashboard → Server configuration.
  */
-export function getApiBaseUrl(): string {
+export function getBuiltInApiBaseUrl(): string {
   const fromEnv = process.env.EXPO_PUBLIC_API_BASE_URL;
   if (typeof fromEnv === "string" && fromEnv.trim().length > 0) {
     return fromEnv.trim().replace(/\/$/, "");
@@ -23,4 +26,15 @@ export function getApiBaseUrl(): string {
   }
 
   return "http://localhost:3000/api";
+}
+
+/**
+ * Effective API origin: in-app `customApiUrl` (AsyncStorage) wins, then built-in chain.
+ */
+export function getApiBaseUrl(): string {
+  const custom = useSettingsStore.getState().customApiUrl;
+  if (typeof custom === "string" && custom.trim().length > 0) {
+    return custom.trim().replace(/\/$/, "");
+  }
+  return getBuiltInApiBaseUrl();
 }

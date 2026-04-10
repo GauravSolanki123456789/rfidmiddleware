@@ -34,7 +34,7 @@ function getErrorMessage(json: unknown, fallback: string): string {
 
 function networkFailureMessage(err: unknown): string {
   if (err instanceof TypeError) {
-    return "Network error — check that the API server is running and EXPO_PUBLIC_API_BASE_URL is correct.";
+    return "Network error — check the server is running and the URL in Dashboard → server settings (or EXPO_PUBLIC_API_BASE_URL).";
   }
   if (err instanceof Error && err.message.includes("Network request failed")) {
     return "Network request failed. Verify Wi‑Fi and server address.";
